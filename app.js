@@ -1,4 +1,5 @@
 const express = require("express");
+const https = require("https");
 
 const app = express();
 app.use(express.json());
@@ -15,35 +16,57 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.post("/", async (req, res) => {
-  try {
-    const userPrompt = req.body.prompt;
-    if (!userPrompt) {
-      return res.status(400).send("Prompt is required");
-    }
+app.post("/", (req, res) => {
+  const userPrompt = req.body.prompt;
+  if (!userPrompt) {
+    return res.status(400).send("Prompt is required");
+  }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: userPrompt }]
-      })
+  const dataString = JSON.stringify({
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content: userPrompt }]
+  });
+
+  const options = {
+    hostname: "api.openai.com",
+    path: "/v1/chat/completions",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + process.env.OPENAI_API_KEY,
+      "Content-Length": Buffer.byteLength(dataString)
+    }
+  };
+
+  const apiReq = https.request(options, (apiRes) => {
+    let responseBody = "";
+    apiRes.on("data", (chunk) => {
+      responseBody += chunk;
     });
 
-    const data = await response.json();
-    if (data.choices && data.choices.length > 0) {
-      const reply = data.choices[0].message.content;
-      res.send(reply);
-    } else {
-      res.status(500).send("Error from OpenAI");
-    }
-  } catch (error) {
-    res.status(500).send("Error: " + error.message);
-  }
+    apiRes.on("end", () => {
+      try {
+        const parsed = JSON.parse(responseBody);
+        if (parsed.choices && parsed.choices.length > 0) {
+          const reply = parsed.choices[0].message.content;
+          res.send(reply);
+        } else if (parsed.error) {
+          res.status(500).send("OpenAI Error: " + parsed.error.message);
+        } else {
+          res.status(500).send("Unknown response from OpenAI");
+        }
+      } catch (e) {
+        res.status(500).send("Parse Error: " + e.message);
+      }
+    });
+  });
+
+  apiReq.on("error", (error) => {
+    res.status(500).send("Request Error: " + error.message);
+  });
+
+  apiReq.write(dataString);
+  apiReq.end();
 });
 
 const PORT = process.env.PORT || 3000;
