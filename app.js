@@ -23,7 +23,7 @@ app.post("/", (req, res) => {
   }
 
   const dataString = JSON.stringify({
-    model: "gpt-3.5-turbo",
+    model: "gpt-4o-mini",
     messages: [{ role: "user", content: userPrompt }]
   });
 
@@ -53,7 +53,7 @@ app.post("/", (req, res) => {
         } else if (parsed.error) {
           res.status(500).send("OpenAI Error: " + parsed.error.message);
         } else {
-          res.status(500).send("Unknown response from OpenAI");
+          res.status(500).send("Unknown response: " + responseBody);
         }
       } catch (e) {
         res.status(500).send("Parse Error: " + e.message);
